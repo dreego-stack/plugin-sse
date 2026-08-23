@@ -1,0 +1,8 @@
+# github.com/dreego-stack/dreego v0.0.69
+## explicit; go 1.22
+github.com/dreego-stack/dreego/core
+github.com/dreego-stack/dreego/core/internal/context
+github.com/dreego-stack/dreego/core/internal/middleware
+github.com/dreego-stack/dreego/core/internal/server
+github.com/dreego-stack/dreego/core/internal/session
+github.com/dreego-stack/dreego/core/internal/validate
