@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -195,6 +196,67 @@ func (w *noFlush) Header() http.Header {
 }
 func (w *noFlush) Write(b []byte) (int, error) { return len(b), nil }
 func (w *noFlush) WriteHeader(s int)            { w.s = s }
+
+func TestSSENotCompressedWhenGzipAccepted(t *testing.T) {
+	srv := newServer(t, Options{Heartbeat: 50 * time.Millisecond})
+	defer srv.Close()
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET /sse HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\n\r\n")
+	br := bufio.NewReader(conn)
+	statusLine, err := br.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.SplitN(strings.TrimSpace(statusLine), " ", 3)
+	code, _ := strconv.Atoi(parts[1])
+	if code != 200 {
+		t.Fatalf("status %d, want 200", code)
+	}
+	h := http.Header{}
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			break
+		}
+		kv := strings.SplitN(line, ":", 2)
+		if len(kv) == 2 {
+			h.Add(strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1]))
+		}
+	}
+	if got := h.Get("Content-Encoding"); got != "identity" {
+		t.Fatalf("Content-Encoding %q, want identity", got)
+	}
+	if got := h.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("Content-Type %q, want text/event-stream", got)
+	}
+	line, err := br.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	line = strings.TrimSpace(line)
+	if strings.Contains(line, ": ping") {
+		return
+	}
+	if size, err := strconv.Atoi(line); err == nil {
+		chunk := make([]byte, size)
+		if _, err := io.ReadFull(br, chunk); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(chunk), ": ping") {
+			t.Fatalf("chunk %q, want plaintext : ping (stream must not be gzipped)", chunk)
+		}
+		return
+	}
+	t.Fatalf("got %q, want plaintext : ping (stream must not be gzipped)", line)
+}
 
 func TestNoFlusherReturns500(t *testing.T) {
 	h := sseHandler(BrokerInstance(), time.Second)

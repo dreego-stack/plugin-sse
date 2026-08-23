@@ -94,6 +94,8 @@ func sseHandler(broker *Broker, heartbeat time.Duration) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Content-Encoding", "identity")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
 
