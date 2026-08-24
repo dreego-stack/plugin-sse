@@ -33,4 +33,5 @@ jobs:
         run: |
           go get github.com/dreego-stack/dreego@latest
           go mod tidy
-          go test -race ./...
+          go mod vendor
+          go test -mod=vendor -race ./...
