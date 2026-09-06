@@ -1,20 +1,14 @@
 package server
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"os/signal"
 	"sync"
 	"sync/atomic"
-	"syscall"
 
 	mw "github.com/dreego-stack/dreego/core/internal/middleware"
 	sess "github.com/dreego-stack/dreego/core/internal/session"
 )
-
-var ErrServerRunning = errors.New("dreego: server already running")
 
 type Store = sess.Store
 
@@ -38,9 +32,6 @@ type App struct {
 	cspHeader      string
 	built          bool
 	buildDone      chan struct{}
-	server         *http.Server
-	serverConfig   ServerConfig
-	shutdownDone   chan error
 }
 
 func New() *App {
@@ -166,82 +157,4 @@ func (a *App) Handler() http.Handler {
 			a.Handler().ServeHTTP(w, r)
 		})
 	}
-}
-
-func (a *App) Listen(addr string) error {
-	if err := a.Build(); err != nil {
-		return err
-	}
-	cfg := a.serverConfig.withDefaults()
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           a.Handler(),
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout:       cfg.ReadTimeout,
-		WriteTimeout:      cfg.WriteTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
-		MaxHeaderBytes:    cfg.MaxHeaderBytes,
-	}
-
-	a.mu.Lock()
-	if a.server != nil {
-		a.mu.Unlock()
-		return ErrServerRunning
-	}
-	a.server = srv
-	shutdownDone := make(chan error, 1)
-	a.shutdownDone = shutdownDone
-	a.mu.Unlock()
-
-	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	serverErr := make(chan error, 1)
-	go func() { serverErr <- srv.ListenAndServe() }()
-
-	clearState := func() {
-		a.mu.Lock()
-		a.server = nil
-		a.shutdownDone = nil
-		a.mu.Unlock()
-	}
-
-	select {
-	case <-sigCtx.Done():
-		shutCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
-		err := srv.Shutdown(shutCtx)
-		if serr := <-serverErr; serr != nil && serr != http.ErrServerClosed {
-			clearState()
-			return serr
-		}
-		clearState()
-		return err
-	case err := <-serverErr:
-		if err == http.ErrServerClosed {
-			rerr := <-shutdownDone
-			clearState()
-			return rerr
-		}
-		clearState()
-		return err
-	}
-}
-
-func (a *App) Shutdown(ctx context.Context) error {
-	a.mu.Lock()
-	srv := a.server
-	done := a.shutdownDone
-	a.mu.Unlock()
-	if srv == nil {
-		return nil
-	}
-	err := srv.Shutdown(ctx)
-	if done != nil {
-		select {
-		case done <- err:
-		default:
-		}
-	}
-	return err
 }
