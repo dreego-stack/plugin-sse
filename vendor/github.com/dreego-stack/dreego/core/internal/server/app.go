@@ -1,20 +1,16 @@
 package server
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"os/signal"
+	"slices"
 	"sync"
 	"sync/atomic"
-	"syscall"
 
+	corei18n "github.com/dreego-stack/dreego/core/internal/i18n"
 	mw "github.com/dreego-stack/dreego/core/internal/middleware"
 	sess "github.com/dreego-stack/dreego/core/internal/session"
 )
-
-var ErrServerRunning = errors.New("dreego: server already running")
 
 type Store = sess.Store
 
@@ -38,9 +34,8 @@ type App struct {
 	cspHeader      string
 	built          bool
 	buildDone      chan struct{}
-	server         *http.Server
-	serverConfig   ServerConfig
-	shutdownDone   chan error
+	i18nConfig     *corei18n.Config
+	localizer      corei18n.Localizer
 }
 
 func New() *App {
@@ -97,6 +92,14 @@ func (a *App) Build() error {
 			return fmt.Errorf("dreego: session store validation failed: %w", err)
 		}
 	}
+	var localeMiddleware func(http.Handler) http.Handler
+	if a.i18nConfig != nil && a.localizer != nil {
+		negotiator, err := corei18n.NewNegotiator(*a.i18nConfig, a.localizer)
+		if err != nil {
+			return fmt.Errorf("dreego: i18n configuration failed: %w", err)
+		}
+		localeMiddleware = negotiator.Middleware
+	}
 
 	mux := http.NewServeMux()
 
@@ -116,17 +119,20 @@ func (a *App) Build() error {
 
 	var h http.Handler = mux
 	h = a.redirectRewriteMiddleware(h)
+	if localeMiddleware != nil {
+		h = localeMiddleware(h)
+	}
 	if a.sessionStore != nil && a.csrfEnabled {
 		h = mw.CSRF(a.sessionStore)(h)
 	}
 	if a.sessionStore != nil {
 		h = a.sessionMiddleware(h)
 	}
-	for i := len(a.middlewares) - 1; i >= 0; i-- {
-		if a.middlewares[i] == nil {
+	for _, v := range slices.Backward(a.middlewares) {
+		if v == nil {
 			continue
 		}
-		h = a.middlewares[i](h)
+		h = v(h)
 	}
 	if a.loggingEnabled {
 		h = mw.RequestLogging()(h)
@@ -166,82 +172,4 @@ func (a *App) Handler() http.Handler {
 			a.Handler().ServeHTTP(w, r)
 		})
 	}
-}
-
-func (a *App) Listen(addr string) error {
-	if err := a.Build(); err != nil {
-		return err
-	}
-	cfg := a.serverConfig.withDefaults()
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           a.Handler(),
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout:       cfg.ReadTimeout,
-		WriteTimeout:      cfg.WriteTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
-		MaxHeaderBytes:    cfg.MaxHeaderBytes,
-	}
-
-	a.mu.Lock()
-	if a.server != nil {
-		a.mu.Unlock()
-		return ErrServerRunning
-	}
-	a.server = srv
-	shutdownDone := make(chan error, 1)
-	a.shutdownDone = shutdownDone
-	a.mu.Unlock()
-
-	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	serverErr := make(chan error, 1)
-	go func() { serverErr <- srv.ListenAndServe() }()
-
-	clearState := func() {
-		a.mu.Lock()
-		a.server = nil
-		a.shutdownDone = nil
-		a.mu.Unlock()
-	}
-
-	select {
-	case <-sigCtx.Done():
-		shutCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
-		err := srv.Shutdown(shutCtx)
-		if serr := <-serverErr; serr != nil && serr != http.ErrServerClosed {
-			clearState()
-			return serr
-		}
-		clearState()
-		return err
-	case err := <-serverErr:
-		if err == http.ErrServerClosed {
-			rerr := <-shutdownDone
-			clearState()
-			return rerr
-		}
-		clearState()
-		return err
-	}
-}
-
-func (a *App) Shutdown(ctx context.Context) error {
-	a.mu.Lock()
-	srv := a.server
-	done := a.shutdownDone
-	a.mu.Unlock()
-	if srv == nil {
-		return nil
-	}
-	err := srv.Shutdown(ctx)
-	if done != nil {
-		select {
-		case done <- err:
-		default:
-		}
-	}
-	return err
 }

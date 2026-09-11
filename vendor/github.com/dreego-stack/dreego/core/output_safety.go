@@ -89,7 +89,7 @@ func safeURLScheme(s string) bool {
 		return true
 	}
 	if strings.Contains(trimmed, ",") {
-		for _, part := range strings.Split(trimmed, ",") {
+		for part := range strings.SplitSeq(trimmed, ",") {
 			if !safeURLScheme(part) {
 				return false
 			}
@@ -100,11 +100,11 @@ func safeURLScheme(s string) bool {
 	if strings.HasPrefix(lower, "//") {
 		return true
 	}
-	colon := strings.IndexByte(lower, ':')
-	if colon < 0 {
+	before, _, ok := strings.Cut(lower, ":")
+	if !ok {
 		return true
 	}
-	scheme := lower[:colon]
+	scheme := before
 	for i := 0; i < len(scheme); i++ {
 		c := scheme[i]
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '+' && c != '.' && c != '-' {

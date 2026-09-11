@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bufio"
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,8 +21,7 @@ func TestSSEPluginIntegration(t *testing.T) {
 	server := httptest.NewServer(app.Handler())
 	defer server.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/sse", nil)
 	if err != nil {
 		t.Fatal(err)

@@ -52,7 +52,7 @@ func (c *SSRContext) Wants(mime string) bool {
 }
 
 func stringsContainsMime(accept, mime string) bool {
-	for _, part := range strings.Split(accept, ",") {
+	for part := range strings.SplitSeq(accept, ",") {
 		t := strings.TrimSpace(part)
 		if idx := strings.IndexByte(t, ';'); idx >= 0 {
 			t = t[:idx]

@@ -17,7 +17,7 @@ func BindForm(r *http.Request, target any) error {
 		return err
 	}
 	rv := reflect.ValueOf(target)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return fmt.Errorf("dreego: BindForm target must be a non-nil pointer, got %T", target)
 	}
 	v := rv.Elem()
@@ -73,7 +73,7 @@ func ValidateForm(form any) map[string]string {
 func Validate(form any, rules map[string]ValidatorFunc) map[string]string {
 	t := reflect.TypeOf(form)
 	v := reflect.ValueOf(form)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 		v = v.Elem()
 	}
@@ -89,7 +89,7 @@ func Validate(form any, rules map[string]ValidatorFunc) map[string]string {
 			formTag = strings.ToLower(field.Name)
 		}
 		val := fmt.Sprint(v.Field(i).Interface())
-		for _, rule := range strings.Split(tag, ",") {
+		for rule := range strings.SplitSeq(tag, ",") {
 			rule = strings.TrimSpace(rule)
 			if msg := applyRuleWithRules(rule, val, rules); msg != "" {
 				errs[formTag] = msg

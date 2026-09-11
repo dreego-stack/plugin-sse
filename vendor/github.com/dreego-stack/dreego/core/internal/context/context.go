@@ -29,6 +29,43 @@ type Context interface {
 	SessionError() error
 }
 
+type RenderContext interface {
+	gcontext.Context
+	Data(key string) any
+	Set(key string, value any)
+	Delete(key string)
+	Get(key string) string
+	Errors(field string) string
+	Old(field string) string
+}
+
+type renderContext struct {
+	gcontext.Context
+	data map[string]any
+}
+
+func NewRender(ctx gcontext.Context) RenderContext {
+	if ctx == nil {
+		ctx = gcontext.Background()
+	}
+	return &renderContext{Context: ctx, data: make(map[string]any)}
+}
+
+func (c *renderContext) Data(key string) any { return c.data[key] }
+
+func (c *renderContext) Set(key string, value any) { c.data[key] = value }
+
+func (c *renderContext) Delete(key string) { delete(c.data, key) }
+
+func (c *renderContext) Get(key string) string {
+	value, _ := c.data[key].(string)
+	return value
+}
+
+func (c *renderContext) Errors(field string) string { return c.Get("error_" + field) }
+
+func (c *renderContext) Old(field string) string { return c.Get("old_" + field) }
+
 var ErrRedirect = errors.New("redirect")
 
 type SSRContext struct {
