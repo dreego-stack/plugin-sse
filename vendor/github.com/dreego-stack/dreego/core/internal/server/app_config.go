@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	corei18n "github.com/dreego-stack/dreego/core/internal/i18n"
 	"github.com/dreego-stack/dreego/core/internal/validate"
 )
 
@@ -163,6 +164,68 @@ func (a *App) SetSessionStore(store Store) error {
 		return err
 	}
 	a.sessionStore = store
+	return nil
+}
+
+func (a *App) SetI18n(config corei18n.Config) error {
+	localizer, err := corei18n.NewCatalogLocalizer(config)
+	if err != nil {
+		return err
+	}
+	return a.SetLocalizer(config, localizer)
+}
+
+func (a *App) SetLocalizer(config corei18n.Config, localizer corei18n.Localizer) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.mutable(); err != nil {
+		return err
+	}
+	if localizer == nil {
+		return errors.New("dreego: localizer is nil")
+	}
+	copy := corei18n.CloneConfig(config)
+	a.i18nConfig = &copy
+	a.localizer = localizer
+	return nil
+}
+
+func (a *App) DisableI18n() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.mutable(); err != nil {
+		return err
+	}
+	a.i18nConfig = nil
+	a.localizer = nil
+	return nil
+}
+
+func (a *App) SetAccountLocaleResolver(resolver corei18n.Resolver) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.mutable(); err != nil {
+		return err
+	}
+	if a.i18nConfig == nil {
+		return errors.New("dreego: i18n is not configured")
+	}
+	a.i18nConfig.Account = resolver
+	return nil
+}
+
+func (a *App) RegisterLocaleResolver(resolver corei18n.Resolver) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.mutable(); err != nil {
+		return err
+	}
+	if a.i18nConfig == nil {
+		return errors.New("dreego: i18n is not configured")
+	}
+	if resolver != nil {
+		a.i18nConfig.Resolvers = append(a.i18nConfig.Resolvers, resolver)
+	}
 	return nil
 }
 

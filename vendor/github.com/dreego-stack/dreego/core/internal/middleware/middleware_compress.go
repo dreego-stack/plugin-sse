@@ -237,13 +237,13 @@ func acceptsGzip(header string) bool {
 	}
 	gzipQ := -1.0
 	wildcardQ := -1.0
-	for _, part := range strings.Split(header, ",") {
+	for part := range strings.SplitSeq(header, ",") {
 		p := strings.TrimSpace(part)
 		name := p
 		q := 1.0
-		if idx := strings.Index(p, ";"); idx >= 0 {
-			name = strings.TrimSpace(p[:idx])
-			if rest := strings.TrimSpace(p[idx+1:]); strings.HasPrefix(rest, "q=") {
+		if before, after, ok := strings.Cut(p, ";"); ok {
+			name = strings.TrimSpace(before)
+			if rest := strings.TrimSpace(after); strings.HasPrefix(rest, "q=") {
 				if v, err := strconv.ParseFloat(rest[2:], 64); err == nil {
 					q = v
 				}

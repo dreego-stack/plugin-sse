@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"sync"
 )
@@ -92,9 +93,7 @@ func (s *CookieStore) TrustedProxies() map[string]bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	proxies := make(map[string]bool, len(s.trustedProxies))
-	for k, v := range s.trustedProxies {
-		proxies[k] = v
-	}
+	maps.Copy(proxies, s.trustedProxies)
 	return proxies
 }
 
@@ -122,9 +121,7 @@ func (s *CookieStore) Set(w http.ResponseWriter, r *http.Request, key, value str
 		m = map[string]string{}
 	}
 	next := make(map[string]string, len(m)+1)
-	for k, v := range m {
-		next[k] = v
-	}
+	maps.Copy(next, m)
 	if value == "" {
 		delete(next, key)
 	} else {

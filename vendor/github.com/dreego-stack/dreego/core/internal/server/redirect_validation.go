@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -145,10 +146,8 @@ func detectRedirectCycle(rules map[string][]string) error {
 			return false
 		}
 		color[path] = gray
-		for _, next := range rules[path] {
-			if visit(next) {
-				return true
-			}
+		if slices.ContainsFunc(rules[path], visit) {
+			return true
 		}
 		color[path] = black
 		return false

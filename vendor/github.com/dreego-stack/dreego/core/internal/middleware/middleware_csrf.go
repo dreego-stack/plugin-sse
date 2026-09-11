@@ -42,8 +42,7 @@ func CSRF(store session.Store) func(http.Handler) http.Handler {
 				clientToken := r.Header.Get("X-CSRF-Token")
 				if clientToken == "" {
 					if err := r.ParseForm(); err != nil {
-						var maxErr *http.MaxBytesError
-						if errors.As(err, &maxErr) {
+						if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 							http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 						} else {
 							http.Error(w, "invalid form body", http.StatusBadRequest)

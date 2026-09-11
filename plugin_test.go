@@ -142,7 +142,7 @@ func TestBroadcastReachesClient(t *testing.T) {
 	BrokerInstance().Broadcast("update", "hello")
 	r := bufio.NewReader(resp.Body)
 	var got strings.Builder
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		got.WriteString(readLine(t, r, time.Second))
 	}
 	if !strings.Contains(got.String(), "event: update") || !strings.Contains(got.String(), "data: hello") {
@@ -195,7 +195,7 @@ func (w *noFlush) Header() http.Header {
 	return w.h
 }
 func (w *noFlush) Write(b []byte) (int, error) { return len(b), nil }
-func (w *noFlush) WriteHeader(s int)            { w.s = s }
+func (w *noFlush) WriteHeader(s int)           { w.s = s }
 
 func TestSSENotCompressedWhenGzipAccepted(t *testing.T) {
 	srv := newServer(t, Options{Heartbeat: 50 * time.Millisecond})
